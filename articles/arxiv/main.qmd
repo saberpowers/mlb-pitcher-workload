@@ -1,0 +1,59 @@
+
+---
+title: "Workload and injury risk in professional baseball pitchers"
+format:
+  html:
+    theme:
+      dark: solar
+      light: cosmo
+number-sections: true
+---
+
+# Introduction
+
+# Data
+
+The study population comprised all pitchers who appeared in major or minor league games between 2017 and 2026. From Major League Baseball (MLB) we obtained player pitch counts for all major and minor league games between 2017 and 2026, as well as pitch-by-pitch tracking data for major league games between 2017 and 2026 and minor league games between 2021 and 2026. Pitch-tracking data are based on a three-dimensional quadratic approximation of pitch flight through space as a function of time. From this approximation we derived pitch type, release location, release speed, horizontal movement, vertical movement, and plate location for each pitch. The data included the date of each pitch.
+
+Paired with the game-by-game pitch count and pitch-by-pitch tracking data, we obtained injury information from the MLB Health and Injury Tracking System (HITS) database. Started in 2010 as a joint initiative by MLB and the MLB Players Association (MLBPA), club medical staff systematically log athlete encounters concerning pain and injuries that lead to missed time. These records include initial date of symptom onset, body part, presumed mechanism of injury, diagnsosis description, missed playing time, and medical clearance date. Our dataset included all pitching arm (shoulder, elbow, or forearm) injuries since 2012 that led to missed playing time.
+
+A target injury is an MLB injured-list placement whose body part is Shoulder or Elbow/Arm and whose recorded side equals the pitcher's dominant throwing side. A target placement is attributed to the latest appearance on or before the placement date only when the delay is zero through five days; that appearance receives $Y_{i\ell q}=1$. A target placement more than five days after the latest appearance, or any non-target placement, censors the current episode without assigning an injury to an appearance. Reinstatement permits a new episode and subsequent recurrent events.
+
+# Methods
+
+Let $a_{i\ell q}$ denote the calendar day of appearance $q$ in risk episode $i$ for pitcher $\ell$, and let $u_{i\ell q} = a_{i\ell q} - r_{i\ell}$ be the number of calendar days since the beginning $r_{i\ell}$ of that episode. There is one Bernoulli observation at each at-risk MLB appearance:
+$$
+  \begin{aligned}
+    Y_{i\ell q} &\sim \operatorname{Bernoulli}(p_{i\ell q}), \\
+    \log\{-\log(1-p_{i\ell q})\}
+      &= \beta_0 + f_0(u_{i\ell q}) + g_\ell(a_{i\ell q}) + b_\ell, \\
+    b_\ell &\sim N(0,\sigma_b^2).
+  \end{aligned}
+$$
+Thus, the baseline clock advances in calendar days but risk is evaluated only at appearances. The pitcher-specific frailty $b_\ell$ is shared across recurrent risk episodes.
+
+The initial episode begins when a pitcher enters observation. An injured-list placement ends the current episode, and the pitcher re-enters after reinstatement. At each reinstatement, $r_{i\ell}$ resets so that the new episode begins at calendar day zero. The episode-day baseline is represented by a penalized spline,
+$$
+  f_0(t) = \sum_{m=1}^M\gamma_{0m}B_{0m}(t),
+$$
+and is centered for identifiability with $\beta_0$.
+
+## Weighted cumulative exposure
+
+Let $z_{\ell k}$ be the pitch count in a completed appearance on calendar day $a_{\ell k}$. Spring-training, minor-league, and major-league appearances all contribute workload. For a pitching appearance, the weighted cumulative effect of the pitcher's past workload on their current injury hazard is
+$$
+  g_\ell(a_{i\ell q})
+    = \sum_{k:1 \leq a_{i\ell q}-a_{\ell k} \leq 60}
+      h(a_{i\ell q}-a_{\ell k})z_{\ell k}.
+$$
+The summation excludes workload from the current appearance. Lags are measured in calendar days, not appearance number. Days without an appearance contribute zero workload, and unavailable history before the observed data begins is zero padded.
+
+We represent the lag-weight function using $M'$ B-spline basis functions of dimension $d$:
+$$
+  h(t) = \sum_{m=1}^{M'}\gamma_m B_m(t), \qquad t \in [1, 60].
+$$
+We penalize the second-difference of the B-spline coefficients, resulting in a a P-spline. Following Zumeta-Olaskoaga et al.\ (2025), we also add a terminal ridge penalty to shrink the tail toward zero:
+$$
+  \lambda_D \sum_{m=d}^{M'}((\gamma_m - \gamma_{m-1}) - (\gamma_{m-2} - \gamma_{m-1}))^2
+    + \lambda_R \sum_{m=M'-d}^{M'}\gamma_m^2.
+$$
