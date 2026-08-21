@@ -1,9 +1,12 @@
 
+# Settings ----
+
 max_lag <- 60
 
-game_log_raw <- data.table::fread("input/data/pitcher_game_log.csv")
 
-game_log <- game_log_raw |>
+# Load data ----
+
+game_log <- data.table::fread("input/data/pitcher_game_log.csv") |>
   # For the extremely rare case that a pitcher appears in multiple games on the same "day"
   # (because of suspended/resumed games or double-headers?), arbitrarily take one of thoes games.
   dplyr::group_by(pitcher, game_date) |>
@@ -17,14 +20,6 @@ game_log <- game_log_raw |>
     level = Lvl, player_id = pitcher, game_id = game_pk, year, date_game, date_game_int, pitch_count
   )
 
-pitcher_year_role <- game_log |>
-  dplyr::group_by(player_id, year = lubridate::year(date_game)) |>
-  dplyr::summarize(
-    # TODO: refine this definition of pitcher role
-    role = ifelse(sum(pitch_count) / dplyr::n() > 75, "starter", "reliever"),
-    .groups = "drop"
-  )
-
 injury_list <- pitchinj::etl_injury_list() |>
   dplyr::select(player_id, date_injury = date_listed)
 
@@ -33,6 +28,17 @@ hits <- pitchinj::etl_hits() |>
   dplyr::distinct(player_id = `Player ID`, date_injury)
 
 injury <- injury_list
+
+
+# Prep data ----
+
+pitcher_year_role <- game_log |>
+  dplyr::group_by(player_id, year = lubridate::year(date_game)) |>
+  dplyr::summarize(
+    # TODO: refine this definition of pitcher role
+    role = ifelse(sum(pitch_count) / dplyr::n() > 75, "starter", "reliever"),
+    .groups = "drop"
+  )
 
 # TODO: Maybe we need to circle back and allow pitchers to be injured on days when they're not
 # pitching because we can't find the matching game for a lot of these injuries.
@@ -51,8 +57,6 @@ injury_matched <- injury |>
   dplyr::group_by(player_id, game_id) |>
   dplyr::summarize(date_injury = min(date_injury), .groups = "drop")
 
-
-
 data_wce <- game_log |>
   dplyr::left_join(pitcher_year_role, by = c("player_id", "year")) |>
   dplyr::left_join(injury_matched, by = c("player_id", "game_id")) |>
@@ -65,6 +69,8 @@ data_wce <- game_log |>
     stint_day = date_game_int - stint_start
   )
 
+
+# Set up the workload matrices ----
 
 date_game_int_split <- split(game_log$date_game_int, game_log$player_id)
 pitch_count_split <- split(game_log$pitch_count, game_log$player_id)
@@ -92,6 +98,9 @@ lag_matrix <- lag_matrix[data_wce$level == "MLB", ]
 workload_matrix <- workload_matrix[data_wce$level == "MLB", ]
 data_wce <- data_wce[data_wce$level == "MLB", ]
 
+
+# Estimate model ----
+
 .time <- Sys.time()
 fit_wce <- mgcv::bam(
   is_injury ~
@@ -112,6 +121,9 @@ fit_wce <- mgcv::bam(
   discrete = TRUE
 )
 print(Sys.time() - .time)
+
+
+# Visualize WCE curve ----
 
 baseline_data <- tibble::tibble(
   role = factor("starter", levels = c("reliever", "starter")),
